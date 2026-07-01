@@ -1,0 +1,1 @@
+"""SmartClix backend package."""

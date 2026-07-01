@@ -1,0 +1,4 @@
+/* SmartClix — App-level styles. Most styling is via Tailwind / design tokens. */
+.App {
+  height: 100vh;
+}

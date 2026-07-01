@@ -1,0 +1,17 @@
+# keep the build context small and free of secrets/local artifacts
+**/node_modules
+**/.venv
+backend/.venv
+frontend/build
+frontend_build
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+*.env
+.git
+.emergent
+**/uvicorn.*.log
+**/cra.*.log
+.vscode
+.idea

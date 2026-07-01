@@ -1,0 +1,93 @@
+/* SmartClix Design System — Phase 1 */
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Doc 3 design system tokens */
+    --color-primary: 37 99 235;       /* #2563EB */
+    --color-success: 22 163 74;       /* #16A34A */
+    --color-warning: 217 119 6;       /* #D97706 */
+    --color-danger:  220 38 38;       /* #DC2626 */
+    --color-bg:      249 250 251;     /* #F9FAFB */
+    --color-surface: 255 255 255;     /* #FFFFFF */
+    --color-border:  229 231 235;     /* #E5E7EB */
+    --color-text:    17 24 39;        /* #111827 */
+    --color-text-muted: 107 114 128;  /* #6B7280 */
+
+    /* shadcn passthrough */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    font-family: 'Inter Tight', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: rgb(var(--color-bg));
+    color: rgb(var(--color-text));
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  code, .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -468px 0; }
+  100% { background-position: 468px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%);
+  background-size: 468px 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+
+/* Custom selection */
+::selection { background: rgb(var(--color-primary) / 0.18); }
+
+/* Sidebar active indicator */
+.nav-active {
+  background-color: rgb(37 99 235 / 0.08);
+  color: rgb(var(--color-primary));
+  border-left: 3px solid rgb(var(--color-primary));
+}
+.nav-active:hover {
+  background-color: rgb(37 99 235 / 0.12);
+}
+
+/* Focus ring */
+.focus-ring:focus-visible {
+  outline: 2px solid rgb(var(--color-primary));
+  outline-offset: 2px;
+}

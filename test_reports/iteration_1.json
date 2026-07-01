@@ -1,0 +1,48 @@
+{
+  "summary": "Phase 1 backend + frontend testing for SmartClix. 11/12 backend tests passed (brute-force lockout fails in multi-pod env). 11/11 frontend Playwright flows passed: login, forgot-password, error-state, admin dashboard, role-based sidebar, admin-only Team/Email settings tabs, operator invite, logout, unauth redirect, reviewer restricted nav & settings.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/auth/login",
+        "issue": "Brute-force lockout broken behind k8s ingress. Backend uses request.client.host which is the ingress controller pod IP (e.g., 10.208.130.77 vs 10.208.130.78). Each backend pod sees a different identifier, so the per-identifier counter is split across pods and the 5-attempt threshold is never reached. Verified by inspecting db.login_attempts: same email produced two identifiers (10.208.130.77:<email> count=1 and 10.208.130.78:<email> count=0 + locked_until). The 6th login attempt returned 401 instead of 429.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_smartclix_phase1.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix brute-force IP detection: parse X-Forwarded-For (or X-Real-IP) header in /api/auth/login instead of using request.client.host. Suggested code: ip = (request.headers.get('x-forwarded-for') or '').split(',')[0].strip() or (request.client.host if request.client else 'unknown'). After fix, re-run backend tests to confirm 429 lockout."
+  ],
+  "critical_code_review_comments": [
+    "request.client.host is unreliable behind proxies/ingress; always honor X-Forwarded-For for security-sensitive identifiers (rate limit, lockout, audit).",
+    "Brute-force counter reset to 0 once lockout begins (register_failure sets count=0 with locked_until). Works correctly per-identifier, but consider also locking by email-only as a second key to mitigate distributed attackers (defense-in-depth).",
+    "Cookies are set with SameSite=None+Secure which is correct for cross-origin preview; ensure production deploys keep HTTPS.",
+    "ObjectId is correctly serialized via serialize_operator (no _id leak); good.",
+    "Operators DELETE: prevents self-delete, but does NOT prevent deleting the last admin — could lock out the org. Recommend: if role==admin and admin_count==1, refuse delete/role-change.",
+    "PATCH /operators/{id}: no protection against demoting the last admin (same risk).",
+    "No rate limiting on /api/auth/forgot-password — abuser could flood the endpoint; consider per-IP throttle.",
+    "Password reset token TTL index uses 'expires_at' with expireAfterSeconds=0 but the field is stored as a Python datetime via insert_one — verify MongoDB sees it as BSON Date (not string) so the TTL actually expires it; spot-check OK.",
+    "VALID_ROLES check in create_operator runs after Pydantic validation; consider using Literal type for stricter validation upfront."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_smartclix_phase1.py"
+  ],
+  "success_rate": {"backend": "92% (11/12)", "frontend": "100% (11/11)"},
+  "test_credentials": "admin@smartclix.app / Admin#12345 ; reviewer@smartclix.app / Reviewer#12345",
+  "seed_data_creation": "Cleaned up TEST_-prefixed operators (test_inv_*, test_mgr_*) and login_attempts entries created during testing.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live in /app/backend/tests/. Run: cd /app/backend/tests && pytest -v. The only failing test (TestBruteForce::test_lockout_after_5_failures) will pass once main agent fixes the X-Forwarded-For client-IP parsing in /api/auth/login. If the test still fails post-fix, manually clear login_attempts via: mongosh smartclix --eval 'db.login_attempts.deleteMany({})'. Frontend cookie-based auth is working end-to-end via REACT_APP_BACKEND_URL.",
+  "rca of the issue": "ROOT CAUSE: Multiple backend replicas behind a kubernetes service receive traffic from different ingress controller pods. FastAPI's request.client.host reports the immediate upstream (ingress pod IP, e.g., 10.208.130.77/.78), which differs between requests. The brute-force protection keys login_attempts by `<client_ip>:<email>`, so the same logical user appears as two separate identifiers depending on which ingress pod proxied the request. Counter never accumulates to 5 on a single key. REPRO: Loop 5x POST /api/auth/login with fixed bad email — observe two docs in db.login_attempts with different ip prefixes and counts splitting. MITIGATION: Use the client IP from X-Forwarded-For header (first IP in the list) for the identifier; fall back to request.client.host only if header absent."
+}

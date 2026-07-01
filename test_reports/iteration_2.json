@@ -1,0 +1,56 @@
+{
+  "summary": "Phase 2 backend: 21/21 pytest passed. Frontend: client detail tabs, workspace ID modal, services toggle, onboarding mark-complete, connections card (Zernio Connected + masked api_key, GSC/BrightLocal Not Configured), Connections /test button, pause/resume status flow ALL work. Reviewer scope (empty list + hidden [New Client]) works. ONE CRITICAL frontend bug: clicking [Create Client →] in the New Client slide-in panel fires ZERO API requests — POST /api/clients never goes out, panel stays open, no error shown.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "NewClientPanel (Clients.js line 175-182)",
+        "issue": "Submit button onClick={submit} does NOT trigger a POST /api/clients. Verified by intercepting page.on('request') — no /api/clients POST appears in the request log after clicking [data-testid=newc-submit-btn]. Button text stays at 'Create Client →' (no busy state), panel stays open, no error shown to user. Backend POST works fine (admin curl/pytest confirmed). Root cause likely: submit button is rendered OUTSIDE <form> (form closes at line 166, button at line 175). The button has no explicit type so default is 'submit', which is a no-op outside a form, while the onClick handler may be silently failing because the Field component's input change doesn't update form.name (input wiring uses `path` argument that doesn't match). Suggested fix: add `type='button'` to the submit button and double-check the Field/input onChange wiring updates form.name correctly; also surface caught errors via toast so failures aren't silent.",
+        "selector": "[data-testid='newc-submit-btn']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Create-client → redirect-to-detail",
+        "issue": "Because POST is never sent, the parent's navigate(`/dashboard/clients/${c.id}`) in onCreated is never reached. Users cannot create clients via the UI. Workaround: API creation (admin curl) works.",
+        "affected_selectors": ["[data-testid='newc-submit-btn']"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "NewClientPanel",
+        "issues": [
+          "Console hydration warning: <span> rendered as child of <option> in operator select — caused by the dev preview/instrumentation wrapper but worth verifying it doesn't bleed into prod build.",
+          "Silent failure UX: if the submit handler throws, nothing is shown to the user (no toast). Wrap submit in try/catch + toast."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_smartclix_phase2.py",
+    "/app/backend/tests/test_smartclix_phase1.py",
+    "/app/test_reports/pytest/phase2_results.xml"
+  ],
+  "action_items": [
+    "FIX: NewClientPanel submit button — add type='button' AND verify Field input onChange path matches form.name, OR move the submit button back INSIDE the <form> element. Surface errors via toast so silent failures don't happen.",
+    "Add 'tab-overview/services/onboarding/connections' to UI tests so future runs don't accidentally click the page title text.",
+    "(Carry-over from phase 1) Fix X-Forwarded-For client-IP parsing for brute-force lockout."
+  ],
+  "critical_code_review_comments": [
+    "Clients.js: 'Create Client' button sits OUTSIDE the <form>. Even though onClick handles it, this couples the click handler to no error feedback. Move button inside form OR add explicit type='button' + visible error path.",
+    "connections.py POST /test: blanket catches InvalidToken but other exceptions (db errors) would 500 silently — acceptable for Phase 2 stub but Phase 4 ping should distinguish auth vs transport failures.",
+    "services_registry.MCP_FIELDS: 'gatherup' is enabled_when='gbp_enabled' but a GBP-only workspace also gets the 'gbp' MCP slot — 2 cards per GBP service is fine but make sure the Onboarding regen for 'gbp' doesn't duplicate items (validated: items are deduped via item_key — OK).",
+    "workspaces.toggle_services: when toggling a service OFF, the common items remain ONLY while at least one other service is on. If you disable ALL services, common items still remain (not purged). Minor — common items will block onboarding_complete=true forever in an all-off state. Consider purging common when last service is disabled.",
+    "clients.create_client: assigned_to is not validated — POST with garbage assigned_to=='xxx' is accepted; consider validating operator exists.",
+    "clients.delete_client: not transactional — a partial failure mid-cascade leaves orphan items. Acceptable for test cleanup endpoint, but document the risk."
+  ],
+  "updated_files": ["/app/backend/tests/test_smartclix_phase2.py"],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "~85% (10/11) — only New Client form submission broken"},
+  "test_credentials": "admin@smartclix.app/Admin#12345 ; reviewer@smartclix.app/Reviewer#12345",
+  "seed_data_creation": "All tests create TEST_* clients via API and DELETE them in fixture teardown. Sunshine Plumbing seed left untouched.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 2 backend tests in /app/backend/tests/test_smartclix_phase2.py — all 21 passing. Frontend tabs use [data-testid=tab-overview|services|onboarding|connections]; using `text=Services` matches the page title NOT the tab — always prefer testid. Sunshine Plumbing seed has SEO+Social ON, Zernio connection saved (api_key ends in 'bcde'), 0/14 onboarding items complete. Reviewer has zero assigned clients — list is empty and [New Client] button is hidden as expected.",
+  "rca of the issue": "Bug: clicking 'Create Client →' in NewClientPanel produces no POST /api/clients. Reproduction: login admin, /dashboard/clients, click [New Client], fill name+website+industry, click [Create Client →] — observe no network call and panel stays open with no toast/error. RCA hypothesis: the submit <button> at Clients.js:175 is rendered OUTSIDE the <form> (form ends at line 166). Inside form, type='submit' default triggers onSubmit; outside form it acts as a regular button. The onClick={submit} should still invoke submit, BUT either (a) `form.name` never populates because Field's onChange wiring (path-based setForm) doesn't set the right key, so the button stays disabled via `disabled={busy||!form.name}` even though it looks enabled to the test (force=True bypasses Playwright's visual-disabled check), or (b) submit throws synchronously and the catch logs to console but no toast is shown. Mitigation: (1) move submit button INSIDE <form> so onSubmit handles it natively; (2) add type='button' explicit; (3) add toast.error in catch."
+}
