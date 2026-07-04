@@ -5,12 +5,19 @@ target platform (Zernio / AdKit / WordPress / Google Business Profile / …).
 
 Real per-service API calls land later. Today every executor is **mocked**
 behind `USE_MOCK_EXECUTORS` (default true): it logs the call, simulates a
-little latency, writes to activity_log exactly as the real call would, and
-returns success. Going live is a per-service env flip — the approval→execution
-loop is identical either way.
+little latency, writes to activity_log, and returns success. Going live is a
+per-service env flip — the approval→execution loop is identical either way.
+
+**Video is agent-rendered.** SmartClix does not render video itself. Approving a
+`video_script` just green-lights the render: it goes to `execution_status =
+"awaiting_render"`, and the Cowork agent picks it up, renders it with its video
+provider (Higgsfield CLI etc.), and POSTs the finished clip back as a
+`video_final` via /api/webhooks/cowork — which arrives as its own queue item for
+a second review. (When we later add a server-side Fal.ai provider, this is the
+one place that changes.)
 
 Paused clients are never auto-executed: the item is approved but left for the
-operator to run manually (spec §14).
+operator to run manually.
 """
 import asyncio
 import logging
@@ -21,7 +28,7 @@ from app.security import now_utc
 
 logger = logging.getLogger("smartclix.exec")
 
-# item_type → the external system that would carry it out
+# item_type → the external system that carries it out
 EXECUTION_TARGET = {
     "social_post": "Zernio",
     "social_batch": "Zernio",
@@ -32,7 +39,6 @@ EXECUTION_TARGET = {
     "review_response": "Google Business Profile",
     "ads_recommendation": "AdKit",
     "ads_creative": "AdKit",
-    "video_script": "Render Pipeline",
     "video_final": "Publisher",
     "backlink_outreach": "Outreach",
     "lsa_dispute": "Google LSA",
@@ -57,22 +63,33 @@ async def execute_approval(approval: dict, workspace: dict, client: dict, operat
     updated approval document with execution_status set."""
     aid = approval["_id"]
     ws_id = str(workspace["_id"])
-    target = EXECUTION_TARGET.get(approval["item_type"], "Unknown")
+    item_type = approval["item_type"]
 
     # Paused client → do not auto-execute; operator runs manually.
     if client and client.get("status") == "paused":
         await db.approval_queue.update_one(
             {"_id": aid}, {"$set": {"execution_status": "not_started", "execution_error": None}}
         )
-        await _log(ws_id, "execution.skipped_paused", approval, operator, {"target": target})
+        await _log(ws_id, "execution.skipped_paused", approval, operator, {})
         logger.info("Execution skipped (client paused): %s", aid)
         return await db.approval_queue.find_one({"_id": aid})
 
+    # Video scripts are rendered by the Cowork agent, not the dashboard.
+    # Approving one just green-lights it; Cowork renders and POSTs a video_final.
+    if item_type == "video_script":
+        await db.approval_queue.update_one(
+            {"_id": aid}, {"$set": {"execution_status": "awaiting_render", "execution_error": None}}
+        )
+        await _log(ws_id, "video.awaiting_render", approval, operator, {})
+        logger.info("Video script approved — awaiting Cowork render: %s", aid)
+        return await db.approval_queue.find_one({"_id": aid})
+
+    target = EXECUTION_TARGET.get(item_type, "Unknown")
     await db.approval_queue.update_one({"_id": aid}, {"$set": {"execution_status": "in_progress"}})
     try:
         if USE_MOCK_EXECUTORS:
             await asyncio.sleep(0.1)  # simulate the round-trip
-            logger.info("[MOCK] executed %s via %s", approval["item_type"], target)
+            logger.info("[MOCK] executed %s via %s", item_type, target)
         else:
             raise NotImplementedError(f"Live executor for {target} is not configured")
 

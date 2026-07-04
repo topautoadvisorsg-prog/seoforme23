@@ -8,12 +8,14 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from app.brute_force import check_lockout, clear_failures, register_failure
+from app.config import ADMIN_EMAIL
 from app.db import db
 from app.deps import get_current_operator
 from app.models import (
     ForgotPasswordIn,
     LoginIn,
     ResetPasswordIn,
+    UnlockIn,
     serialize_operator,
 )
 from app.security import (
@@ -51,6 +53,33 @@ async def login(payload: LoginIn, request: Request, response: Response):
         {"_id": op["_id"]}, {"$set": {"last_login": now_utc().isoformat()}}
     )
 
+    op_id = str(op["_id"])
+    set_auth_cookies(
+        response,
+        create_access_token(op_id, op["email"], op["role"]),
+        create_refresh_token(op_id),
+    )
+    return serialize_operator(op)
+
+
+@router.post("/unlock")
+async def unlock(payload: UnlockIn, request: Request, response: Response):
+    """Password-only login. Signs in as the primary admin account so the app
+    needs just one password — no email, no accounts UI. Same brute-force
+    protection and cookies as /login.
+    """
+    identifier = f"{client_ip(request)}:unlock"
+    await check_lockout(identifier)
+
+    op = await db.operators.find_one({"email": ADMIN_EMAIL})
+    if not op or not verify_password(payload.password, op["password_hash"]):
+        await register_failure(identifier)
+        raise HTTPException(status_code=401, detail="Wrong password. Try again.")
+
+    await clear_failures(identifier)
+    await db.operators.update_one(
+        {"_id": op["_id"]}, {"$set": {"last_login": now_utc().isoformat()}}
+    )
     op_id = str(op["_id"])
     set_auth_cookies(
         response,

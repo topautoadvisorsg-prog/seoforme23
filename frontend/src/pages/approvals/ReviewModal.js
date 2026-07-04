@@ -64,10 +64,22 @@ function PayloadBody({ item }) {
     case "video_final":
       return (
         <div className="space-y-3">
+          {p.video_url && (
+            <Labeled label="Rendered Video">
+              <a href={p.video_url} target="_blank" rel="noopener noreferrer" className="text-[rgb(var(--color-primary))] hover:underline">
+                {p.video_url}
+              </a>
+              {p.rendered_by && (
+                <span className="ml-2 text-xs text-[rgb(var(--color-text-muted))]">· {p.rendered_by}</span>
+              )}
+            </Labeled>
+          )}
           {p.duration && <Labeled label="Duration">{p.duration}</Labeled>}
-          <Labeled label="Script">
-            <pre className="whitespace-pre-wrap font-sans text-sm">{p.script}</pre>
-          </Labeled>
+          {p.script && (
+            <Labeled label="Script">
+              <pre className="whitespace-pre-wrap font-sans text-sm">{p.script}</pre>
+            </Labeled>
+          )}
         </div>
       );
     case "gbp_review":
@@ -180,6 +192,10 @@ export default function ReviewModal({ item, onClose, onChanged }) {
                 <span className="text-[rgb(var(--color-danger))]">Execution failed: {item.execution_error}</span>
               ) : item.execution_status === "in_progress" ? (
                 <span>Executing…</span>
+              ) : item.execution_status === "awaiting_render" ? (
+                <span className="text-[rgb(var(--color-warning))]">✓ Approved — sent to the agent to render</span>
+              ) : item.execution_status === "rendered" ? (
+                <span className="text-[rgb(var(--color-success))]">✓ Rendered — finished video is in the queue</span>
               ) : (
                 <span className="text-[rgb(var(--color-text-muted))]">Approved — awaiting manual execution</span>
               )}

@@ -168,6 +168,22 @@ MCP_FIELDS: dict[str, dict] = {
             {"key": "account_id", "label": "LinkedIn Ad Account ID"},
         ],
     },
+    "fal_video": {
+        "label": "Fal.ai (Kling) — Video Generation",
+        "enabled_when": "video_enabled",
+        "fields": [
+            {"key": "api_key", "label": "Fal.ai API Key", "secret": True},
+            {"key": "model", "label": "Model (e.g. fal-ai/kling-video/v1.6/standard)"},
+        ],
+    },
+    "elevenlabs": {
+        "label": "ElevenLabs — Voice",
+        "enabled_when": "video_enabled",
+        "fields": [
+            {"key": "api_key", "label": "ElevenLabs API Key", "secret": True},
+            {"key": "voice_id", "label": "Voice ID"},
+        ],
+    },
 }
 
 

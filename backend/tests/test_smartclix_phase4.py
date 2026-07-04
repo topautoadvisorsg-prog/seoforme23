@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 import requests
+from bson import ObjectId
 from conftest import API, WEBHOOK_SECRET, _db
 
 
@@ -126,3 +127,45 @@ class TestExecutionOnApprove:
         appr = admin_session.post(f"{API}/approvals/{aid}/approve", json={}).json()
         assert appr["status"] == "approved"
         assert appr["execution_status"] == "not_started"
+
+
+class TestVideoPipeline:
+    def test_video_connections_available_when_enabled(self, admin_session, wh_client):
+        cid, ws_id = wh_client
+        _db.workspaces.update_one({"_id": ObjectId(ws_id)}, {"$set": {"video_enabled": True}})
+        conns = admin_session.get(f"{API}/clients/{cid}/connections").json()["connections"]
+        names = {c["service_name"] for c in conns}
+        assert "fal_video" in names, names
+        assert "elevenlabs" in names, names
+
+    def test_approving_script_awaits_render_no_fake_video(self, admin_session, wh_client):
+        _, ws_id = wh_client
+        r = requests.post(WH, json={"workspace_id": ws_id, "item_type": "video_script",
+                                    "title": "Promo script", "payload": {"script": "hi", "duration": "30s"}}, headers=HDR)
+        aid = r.json()["id"]
+        appr = admin_session.post(f"{API}/approvals/{aid}/approve", json={}).json()
+        assert appr["status"] == "approved"
+        # dashboard green-lights the render; it does NOT fabricate a video
+        assert appr["execution_status"] == "awaiting_render"
+        finals = admin_session.get(
+            f"{API}/approvals", params={"workspace_id": ws_id, "item_type": "video_final"}
+        ).json()["items"]
+        assert len(finals) == 0
+
+    def test_cowork_finished_video_marks_script_rendered(self, admin_session, wh_client):
+        _, ws_id = wh_client
+        sr = requests.post(WH, json={"workspace_id": ws_id, "item_type": "video_script",
+                                     "title": "Script A", "payload": {"script": "x"}}, headers=HDR)
+        sid = sr.json()["id"]
+        admin_session.post(f"{API}/approvals/{sid}/approve", json={})
+        # Cowork renders and POSTs the finished video, referencing the script
+        fr = requests.post(WH, json={"workspace_id": ws_id, "item_type": "video_final",
+                                     "title": "Finished — Script A",
+                                     "payload": {"video_url": "https://x/y.mp4", "source_script_id": sid}}, headers=HDR)
+        assert fr.status_code == 200
+        script = admin_session.get(f"{API}/approvals/{sid}").json()
+        assert script["execution_status"] == "rendered"
+        finals = admin_session.get(
+            f"{API}/approvals", params={"workspace_id": ws_id, "item_type": "video_final"}
+        ).json()["items"]
+        assert len(finals) == 1 and finals[0]["status"] == "pending"

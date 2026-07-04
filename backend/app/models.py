@@ -8,6 +8,11 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1)
 
 
+class UnlockIn(BaseModel):
+    """Single-password gate — no email. This is a private tool, not a SaaS."""
+    password: str = Field(min_length=1)
+
+
 class ForgotPasswordIn(BaseModel):
     email: EmailStr
 

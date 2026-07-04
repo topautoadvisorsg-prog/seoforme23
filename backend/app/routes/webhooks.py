@@ -91,6 +91,16 @@ async def cowork_webhook(payload: WebhookIn, x_webhook_secret: str = Header(defa
         }
         res = await db.approval_queue.insert_one(doc)
         doc["_id"] = res.inserted_id
+        # If Cowork delivered a finished video, mark its source script rendered
+        # so it drops out of the "awaiting render" work list.
+        if it == "video_final" and body.get("source_script_id"):
+            try:
+                await db.approval_queue.update_one(
+                    {"_id": ObjectId(body["source_script_id"])},
+                    {"$set": {"execution_status": "rendered"}},
+                )
+            except (InvalidId, TypeError):
+                pass
         serialized = serialize_approval(doc, client)
         await registry.broadcast_to_workspace(ws_id, {"type": "approval.created", "approval": serialized})
         await _notify(ws_id, "new_approval", f"New {doc['title']}", "Awaiting your review.",

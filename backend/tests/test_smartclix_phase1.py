@@ -32,6 +32,17 @@ class TestAuthFlow:
         assert r.json()["email"] == ADMIN_EMAIL
         assert r.json()["role"] == "admin"
 
+    def test_unlock_wrong_password_401(self, fresh_session):
+        r = fresh_session.post(f"{API}/auth/unlock", json={"password": "definitely-wrong"})
+        assert r.status_code == 401
+
+    def test_unlock_correct_password_logs_in(self, fresh_session):
+        # password-only gate — signs in the admin, no email needed
+        r = fresh_session.post(f"{API}/auth/unlock", json={"password": ADMIN_PASSWORD})
+        assert r.status_code == 200, r.text
+        assert r.json()["email"] == ADMIN_EMAIL
+        assert "access_token" in fresh_session.cookies
+
     def test_login_wrong_password_returns_401(self, fresh_session):
         # unique identifier to avoid lockout interference
         unique = f"wrongpw_{uuid.uuid4().hex[:8]}@smartclix.app"

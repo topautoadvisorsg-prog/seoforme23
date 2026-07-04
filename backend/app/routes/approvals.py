@@ -113,6 +113,7 @@ async def list_approvals(
     item_type: str | None = Query(default=None),
     workspace_id: str | None = Query(default=None),
     flagged: bool | None = Query(default=None),
+    execution_status: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
 ):
     scope_filter = await _authorized_workspace_filter(operator)
@@ -128,6 +129,8 @@ async def list_approvals(
         query["workspace_id"] = workspace_id
     if flagged is not None:
         query["flagged"] = flagged
+    if execution_status:
+        query["execution_status"] = execution_status
 
     items = await db.approval_queue.find(query).sort("created_at", -1).to_list(limit)
     enriched = await _enrich_list(items)

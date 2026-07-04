@@ -25,6 +25,12 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  const unlock = useCallback(async (password) => {
+    const data = await authService.unlock(password);
+    setOperator(data);
+    return data;
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await authService.logout();
@@ -35,7 +41,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ operator, login, logout, refresh: fetchMe }}>
+    <AuthContext.Provider value={{ operator, login, unlock, logout, refresh: fetchMe }}>
       {children}
     </AuthContext.Provider>
   );
